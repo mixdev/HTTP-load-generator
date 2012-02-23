@@ -1,3 +1,11 @@
 heavy_load.c
 
 This program is designed to generate millions of http requests/sec for load testing purposes.
+
+Usage:
+     gcc heavy_load.c -o heavy_load
+     ./heavy_load 192.168.1.2 80
+
+Use the IP address of the server you want to test.
+
+WARNING: this program can generate enough traffic to overload your http server! It effectively DOSes the target with http requests, (which is great for testing, but obviously not something you want to do to a production server).
