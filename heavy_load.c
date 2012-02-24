@@ -16,21 +16,11 @@
 #include <time.h>
 #include <string.h>
 
-/* 150 threads running 900 sockets each => 135k connections and having each socket 
-doing 10000 requests should be enough coming from one program instance */
-#define CONNECTIONS 450
-#define THREADS 150
-#define REQUESTS 10000
-#define DURATION 30 
-#define READ_BUFFER 1024
-
-/* TODO: 
-- take into account round trip time for one request, serialization speed
-- based on those check if usleep values for each socket and for each fork are too
-low and increase them if necessary 
-- increase max open files to open more sockets at once 
-- since this is TCP 3-way handshake is required per socket, take into account when computing RTT 
-- check for server response of HTTP 200 OK  */
+#define THREADS 24        // spawns this many processes
+#define CONNECTIONS 100   // each thread makes this many socket connections
+#define REQUESTS 100000   // each socket connection will make this many requests
+#define DURATION 30       // program runs for 30 seconds 
+#define READ_BUFFER 1024  // buffer for reading http server responses
 
 /* threads[THREADS] is a counter for the number of http requests issued by various forks */
 /* each thread would write to its own place, less concurrency */
@@ -88,15 +78,14 @@ void httpload(char *host, char *port, int count) {
  
                     /* if the server returns "200", increment number of successful requests */
                     if (strstr(server_response, "200"))  {
-                       threads[count] += 1; 
+                        threads[count] += 1; 
+                        //printf("%s", server_response);  //debug
                     }
                 }
                 if(req == -1) {
                     close(sockets[x]);
-                    sockets[x] = make_socket(host, port);
-                    /* CHANGEME: should another for loop be run here ^^ */
-                    /* even if the socket failed, the variable was incremented, need to decrement it if the socket failed */
-                    threads[count] -= 10000;
+                    /* failed connections happen. I only care about tracking successful connections.
+                       On failure, simply close socket and continue. */
                 }
             }
         }
@@ -117,8 +106,7 @@ int main(int argc, char **argv) {
 
     /* CHANGEME: to be or not to be +1 */
     pid_t offspring[THREADS+1] = { '\0' };
-    int x;
-        int count;
+    int x, i, count;
 
     /* create a new thread for each httpload() instance */
     for(x = 0; x < THREADS; x++) {
@@ -137,21 +125,22 @@ int main(int argc, char **argv) {
     /* print number of requests every second */
     /* generate load for the DURATION of the test */
     struct timeval now;
-    for (count=0; count < DURATION ; count++) {
-        int i;
-        long long requests = 0;
-    for(i = 0; i < THREADS; i++) {
-        gettimeofday(&now, NULL);
-        printf("%ld\n", requests);
-        //printf("program starttime: %ld\n", start.tv_sec); // debug
-        //printf("thread nowtime: %ld\n", now.tv_sec);      // debug
+    long long requests;
+    for (count=0; count < DURATION; count++) {
+        printf("count: %d\n", count);         //debug
+        requests = 0;                         // resets each second
 
-        requests += threads[i];
-        printf("requests made total: %lld\naverage requests/second: %lld\n", requests, (long long)requests/(((now.tv_sec) - (start.tv_sec)) +1)); 
-        sleep(1); 
+        /* grab the number of requests done by each thread */
+        for(i = 0; i < THREADS; i++) {
+            requests += threads[i];   
         }
+            sleep(1); 
+            gettimeofday(&now, NULL);
+            printf("average requests/second: %lld\n", (long long)requests/(((now.tv_sec) - (start.tv_sec)) +1)); 
+//            printf("requests made total: %lld\n", requests);  //debug
     }
 
+    /* take commandline options */
     getc(stdin);
 
     /* kill child pids */
