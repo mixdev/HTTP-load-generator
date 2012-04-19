@@ -16,17 +16,17 @@
 #include <time.h>
 #include <string.h>
 
-#define THREADS 1        // spawns this many processes
-#define CONNECTIONS 10000   // each thread makes this many socket connections
-#define REQUESTS 100000   // each socket connection will make this many requests
-//#define DURATION 600       // program runs for this many seconds - now runs forever
-#define READ_BUFFER 1024  // buffer for reading http server responses
+#define THREADS 1          /* spawns this many processes. Currently only reliable with 1 thread */
+#define CONNECTIONS 10000  /* each thread makes this many socket connections */
+#define REQUESTS 100000    /* each socket connection will make this many requests */
+#define DURATION 20        /* program runs for this many seconds - now runs forever */
+#define READ_BUFFER 1024   /* buffer for reading http server responses */
 
 /* threads[THREADS] is a counter for the number of http requests issued by various forks */
 /* each thread would write to its own place, less concurrency */
 
 
-/* each thread is writing to array thread[1-10000] though */
+/* each thread is writing to array thread[0-THREADS] */
 long *threads = NULL;
 
 
@@ -61,7 +61,7 @@ int make_socket(char *host, char *port) {
     return sock;
 }
 
-/* This function is called from main(), where is told what thread[tnum] to use.
+/* This function is called from main(), where it is told what thread[tnum] to use.
    The thread[tnum] space gives this particular child process a place
    to store its total number of http requests. */
 
@@ -71,9 +71,9 @@ void httpload(char *host, char *port, int tnum) {
     int x, req, y, response;
     char server_response[READ_BUFFER]; 
 
-    /* http header/s */
+    /* http headers */
     //char http_header[31] = "HEAD /test.htm HTTP/1.0\r\n\r\n \0";
-    char http_header[31] = "GET /test.txt HTTP/1.0\r\n\r\n \0"; // debug
+    char http_header[31] = "GET /test.txt HTTP/1.0\r\n\r\n \0"; 
 
     /* ignore SIGPIPE */
     signal(SIGPIPE, SIG_IGN);
@@ -131,8 +131,6 @@ int main(int argc, char **argv) {
         if(0 == pid) {                             /* child process */
             offspring[threadnum] = getpid();
             httpload(argv[1], argv[2], threadnum);
-            //usleep(10000);                        /* 10 ms delay between spawning processes */
-            sleep(60);  // 10 second delay between processes ('users' added every 10 seconds) DEBUG
         }
         if(pid < 0) {                             /* failed to fork */
             fprintf(stderr, "Can't fork\n");
@@ -143,10 +141,11 @@ int main(int argc, char **argv) {
     /* print number of requests every second */
     /* generate load for the DURATION of the test */
     struct timeval now;
-    long long requests;
-    //for (count=0; count < DURATION; count++) {
-    while (1) { // debug, run forever
-        requests = 0;                         // resets each second
+    long long requests, average;
+    int duration = atoi(argv[3]);
+    for (count=0; count < duration; count++) {
+    //while (1) { // debug, run forever
+        requests = 0;              /* resets each second
 
         /* grab the number of requests done by each thread */
         for(i = 0; i < THREADS; i++) {
@@ -154,7 +153,10 @@ int main(int argc, char **argv) {
         }
             sleep(1);
             gettimeofday(&now, NULL);
-            printf("average requests/second: %lld\n", (long long)requests/(((now.tv_sec) - (start.tv_sec)) +1)); 
+            /* print average req/sec */
+            //printf("%lld\n", (long long)requests/(((now.tv_sec) - (start.tv_sec)) +1)); 
+            average = (long long)requests/(((now.tv_sec) - (start.tv_sec)) +1); //debug
+            fprintf(stderr, "%lld \n", average);  // debug for another program that only listens to stderr...
     }
 
     /* take commandline options */
